@@ -23,7 +23,7 @@ splitYearTerm <- function(year.term) {
   YT[, c("year", "term")] <- yt
   YT
 }
-  
+
 episodesByTerm <- function(year.term) {
   yt <- splitYearTerm(year.term)
   qbody <- str_interp('{
@@ -39,7 +39,8 @@ episodesByTerm <- function(year.term) {
   res <- Search(es.episode.index, body = qbody, asdf = TRUE, size = 9999)
   res <- res$hits$hits
   # rewrite the source doc field names to make the df easier to work with
-  res %>% setNames(gsub("_source\\.", "", names(.)))
+  res <- res %>% setNames(gsub("_source\\.", "", names(.)))
+  tbl_df(res)
 }
 
 transcriptStats <- function() {
@@ -77,7 +78,7 @@ transcriptStats <- function() {
     }
   }'
   res <- Search(es.transcript.index, body = qbody, asdf = T, size = 0)
-  as.tbl(data.frame(res$aggregations))
+  tbl_df(data.frame(res$aggregations))
 }
 
 termAgg <- function(field, size = 0, sub_aggs = NULL) {
@@ -95,24 +96,24 @@ termAgg <- function(field, size = 0, sub_aggs = NULL) {
   agg
 }
 
-viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL, 
+viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
                          huid = NULL, mpid = NULL, playing = T, anonymous = F) {
-  
+
   must_not <- list()
   must <- list()
-  
+
   if (playing) {
     must <- c(must, list(list(term=list(action.is_playing=T))))
   }
-  
+
   if (!anonymous) {
     must_not <- c(must_not, list(list(term=list(huid="anonymous"))))
   }
-  
+
   if (!is.null(year.term)) {
     yt <- splitYearTerm(year.term)
     must <- c(
-      must, 
+      must,
       list(list(term=list(episode.year=yt$year))),
       list(list(term=list(episode.term=yt$term)))
     )
@@ -122,11 +123,11 @@ viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
   }
   if (!is.null(huid)) {
     must <- c(must, list(list(term=list(huid=huid))))
-  } 
+  }
   if (!is.null(mpid)) {
     must <- c(must, list(list(term=list(mpid=mpid))))
   }
-  
+
   q <- list(
     query=list(
       bool=list(
@@ -135,12 +136,12 @@ viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
       )
     )
   )
-  
+
   if (!is.null(aggs)) {
     q$aggs <- aggs
   }
-  
+
   qbody <- toJSON(q, pretty = T, auto_unbox = T)
   res <- Search(index, body = qbody, asdf = T, size = 0)
-  as.tbl(data.frame(res$aggregations))
+  tbl_df(data.frame(res$aggregations))
 }

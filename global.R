@@ -1,6 +1,7 @@
 rm(list=ls())
 
 library(dotenv)
+library(jsonlite)
 library(tidyverse)
 library(elastic)
 

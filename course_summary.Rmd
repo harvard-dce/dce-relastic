@@ -1,0 +1,36 @@
+---
+title: "Course Lecture Viewing Summary"
+output: html_notebook
+---
+
+```{r}
+source('global.R')
+
+data.dir <- '~/projects/shinyboard/data'
+course.term <- '2017-02'
+course.series.id <- '20170224816'
+```
+
+```{r}
+rollcall_path <- sprintf("%s/rollcall.%s.csv", data.dir, course.term)
+attendance_path <- sprintf("%s/attendance.%s.csv", data.dir, course.term)
+rollcall <- tbl_df(read.csv(rollcall_path, stringsAsFactors = F))
+attendance <- tbl_df(read.csv(attendance_path, stringsAsFactors = F))
+episodes <- episodesByTerm(course.term)
+```
+
+```{r}
+course.lectures <- filter(episodes, series == course.series.id)
+course.students <- filter(rollcall, series == course.series.id & reg_level != 'S')
+course.registered.students <- filter(course.students, status == 'Registered')
+course.students$series <- as.character(course.students$series)
+student.attendance <- filter(attendance, huid %in% course.students$huid & mpid %in% course.lectures$mpid)
+student.attendance <- left_join(student.attendance, course.students)
+lecture.attendance <- left_join(student.attendance, course.lectures)
+attendance.summary <- lecture.attendance %>%
+  group_by(mpid, title, available) %>% 
+  summarise(registered_watched = sum(status=='Registered'), all_watched = n())
+attendance.summary <- mutate(attendance.summary, all_watched_pct = as.integer((all_watched / nrow(course.students)) * 100))
+attendance.summary <- mutate(attendance.summary, reg_watched_pct = as.integer((registered_watched / nrow(course.registered.students)) * 100))
+
+```
