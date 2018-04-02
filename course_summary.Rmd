@@ -9,12 +9,64 @@ source('global.R')
 data.dir <- '~/projects/shinyboard/data'
 course.term <- '2017-02'
 course.series.id <- '20170224816'
+actions.index <- 'useractions-matterhorn-production-2017.*'
 ```
 
 ```{r}
 rollcall_path <- sprintf("%s/rollcall.%s.csv", data.dir, course.term)
-attendance_path <- sprintf("%s/attendance.%s.csv", data.dir, course.term)
 rollcall <- tbl_df(read.csv(rollcall_path, stringsAsFactors = F))
+episodes <- getEpisodes('2017-02', course.series.id) %>% select(mpid, title, duration, available, live_duration)
+```
+
+```{r}
+for (row in 1:nrow(episodes)) {
+  mpid <- episodes[row, "mpid"]$mpid
+  student.stats <-  viewingStats(
+    actions.index, 
+    '2017-02', 
+    mpid = mpid, 
+    aggs = termAgg(
+      "huid", 
+      sub_aggs = histogramAgg(
+        "action.inpoint", 
+        "300", 
+        agg.name = "inpoints"
+      )
+    )
+  )
+  if (nrow(student.stats) == 0) {
+    next
+  }
+  student.stats <- student.stats %>% mutate(intervals = length(by_huid.buckets.inpoints.buckets))
+  glimpse(student.stats)
+}
+```
+
+```{r}
+episode.stats <- episodes %>% 
+  rowwise() %>% 
+  mutate(
+    stats = list(
+      viewingStats(
+        actions.index, 
+        '2017-02', 
+        mpid = mpid, 
+        aggs = termAgg(
+          "huid", 
+          sub_aggs = histogramAgg(
+            "action.inpoint", 
+            "300", 
+            agg.name = "inpoints"
+          )
+        )
+      )
+    )
+  )
+episode.stats <- episode.stats %>% filter(nrow(stats) != 0)
+```
+
+```{r}
+attendance_path <- sprintf("%s/attendance.%s.csv", data.dir, course.term)
 attendance <- tbl_df(read.csv(attendance_path, stringsAsFactors = F))
 episodes <- episodesByTerm(course.term)
 ```

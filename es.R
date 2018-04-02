@@ -43,6 +43,30 @@ episodesByTerm <- function(year.term) {
   tbl_df(res)
 }
 
+getEpisodes <- function(year.term, series = NULL) {
+  yt <- splitYearTerm(year.term)
+  must <- list(
+    list(term=list(year=yt$year)),
+    list(term=list(term=yt$term))
+  )
+  if (!is.null(series)) {
+    must <- c(must, list(list(term=list(series=series))))
+  }
+  q <- list(
+    query=list(
+      bool=list(
+        must=must
+      )
+    )
+  )
+  qbody <- toJSON(q, pretty = T, auto_unbox = T)
+  res <- Search(es.episode.index, body = qbody, asdf = TRUE, size = 9999)
+  res <- res$hits$hits
+  # rewrite the source doc field names to make the df easier to work with
+  res <- res %>% setNames(gsub("_source\\.", "", names(.)))
+  tbl_df(res)
+}
+
 transcriptStats <- function() {
   qbody <- '{
     "query": { "match_all": {} },
@@ -81,6 +105,32 @@ transcriptStats <- function() {
   tbl_df(data.frame(res$aggregations))
 }
 
+histogramAgg <- function(field, interval, agg.name = NULL, min_doc_count = 1) {
+  agg <- list()
+  if (is.null(agg.name)) {
+    agg.name <- sprintf("%s_histogram", field)
+  }
+  agg[[agg.name]] <- list(
+    histogram=list(
+      field=field,
+      interval=interval,
+      min_doc_count=min_doc_count
+    )
+  )
+  agg
+}
+
+cardinalityAgg <- function(field) {
+  agg <- list()
+  agg.name <- sprintf("%s_cardinality", field)
+  agg[[agg.name]] <- list(
+    cardinality=list(
+      field=field
+    )
+  )
+  agg
+}
+
 termAgg <- function(field, size = 0, sub_aggs = NULL) {
   agg <- list()
   agg.name <- sprintf("by_%s", field)
@@ -97,7 +147,7 @@ termAgg <- function(field, size = 0, sub_aggs = NULL) {
 }
 
 viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
-                         huid = NULL, mpid = NULL, playing = T, anonymous = F) {
+                         huid = NULL, mpid = NULL, playing = T, anonymous = F, just.json = F) {
 
   must_not <- list()
   must <- list()
@@ -142,6 +192,14 @@ viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
   }
 
   qbody <- toJSON(q, pretty = T, auto_unbox = T)
-  res <- Search(index, body = qbody, asdf = T, size = 0)
-  tbl_df(data.frame(res$aggregations))
+  if (just.json) {
+    print(qbody)
+  } else {
+    res <- Search(index, body = qbody, asdf = T, size = 0)
+    if (res$hits$total) {
+      tbl_df(data.frame(res$aggregations))
+    } else {
+      tibble()
+    }
+  }
 }
