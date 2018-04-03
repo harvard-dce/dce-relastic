@@ -18,3 +18,4 @@ es.pwd <- env("ES_PWD")
 es.episode.index <- env("ES_EPISODE_INDEX", 'episodes')
 es.transcript.index <- env("ES_TRANSCRIPT_INDEX", 'transcripts')
 default.tz <- "America/New_York"
+rollcall.path <- env('ROLLCALL_PATH')

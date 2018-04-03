@@ -10,79 +10,87 @@ data.dir <- '~/projects/shinyboard/data'
 course.term <- '2017-02'
 course.series.id <- '20170224816'
 actions.index <- 'useractions-matterhorn-production-2017.*'
+inpoint.interval <- 300
 ```
 
 ```{r}
-rollcall_path <- sprintf("%s/rollcall.%s.csv", data.dir, course.term)
-rollcall <- tbl_df(read.csv(rollcall_path, stringsAsFactors = F))
-episodes <- getEpisodes('2017-02', course.series.id) %>% select(mpid, title, duration, available, live_duration)
+if (rollcall.path == "") {
+  rollcall.path <- sprintf("%s/rollcall.%s.csv", data.dir, course.term)
+}
+rollcall <- tbl_df(
+  read.csv(
+    rollcall.path, stringsAsFactors = F
+    )
+  ) %>% filter(series == course.series.id & reg_level != 'S')
+episodes <- getEpisodes('2017-02', course.series.id) %>% 
+  select(mpid, title, duration, available, start, live_duration) %>%
+  mutate(available = coalesce(available, start))
 ```
 
 ```{r}
-for (row in 1:nrow(episodes)) {
-  mpid <- episodes[row, "mpid"]$mpid
-  student.stats <-  viewingStats(
+
+calcAttendance <- function(mpid, duration, live = F) {
+  student.stats <- viewingStats(
     actions.index, 
     '2017-02', 
     mpid = mpid, 
+    live = live,
     aggs = termAgg(
       "huid", 
       sub_aggs = histogramAgg(
         "action.inpoint", 
-        "300", 
+        toString(inpoint.interval), 
         agg.name = "inpoints"
       )
     )
+#   ,print.json = T
   )
-  if (nrow(student.stats) == 0) {
-    next
+  if (nrow(student.stats) != 0) {
+    duration.in.seconds <- duration / 100
+    student.stats <- student.stats %>% 
+      rowwise() %>% 
+      mutate(
+        huid=by_huid.buckets.key,
+        intervals=nrow(by_huid.buckets.inpoints.buckets),
+        watched=round((intervals / (duration.in.seconds / inpoint.interval)) * 100)
+      ) %>%
+      select(huid, intervals, watched) %>%
+      left_join(rollcall)
   }
-  student.stats <- student.stats %>% mutate(intervals = length(by_huid.buckets.inpoints.buckets))
-  glimpse(student.stats)
+  list(student.stats)
 }
+
 ```
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 episode.stats <- episodes %>% 
   rowwise() %>% 
   mutate(
-    stats = list(
-      viewingStats(
-        actions.index, 
-        '2017-02', 
-        mpid = mpid, 
-        aggs = termAgg(
-          "huid", 
-          sub_aggs = histogramAgg(
-            "action.inpoint", 
-            "300", 
-            agg.name = "inpoints"
-          )
-        )
-      )
-    )
+    stats.vod              = calcAttendance(mpid, duration, live = F),
+    stats.live             = calcAttendance(mpid, live_duration, live = T),
+    huids.vod              = list(stats.vod$huid),
+    huids.live             = list(stats.live$huid),
+    huids.vod.dce          = list(filter(stats.vod, huid %in% rollcall$huid)$huid),
+    huids.live.dce         = list(filter(stats.live, huid %in% rollcall$huid)$huid),
+    viewers.total          = length(union(huids.vod, huids.live)),
+    viewers.vod            = length(huids.vod),
+    viewers.live           = length(huids.live),
+    viewers.both           = length(intersect(huids.vod, huids.live)),
+    viewers.total.dce      = length(union(huids.vod.dce, huids.live.dce)),
+    viewers.vod.dce        = length(huids.vod.dce),
+    viewers.live.dce       = length(huids.live.dce),
+    viewers.both.dce       = length(intersect(huids.vod.dce, huids.live.dce)),
+    attendance.vod.pct     = round((viewers.vod.dce / nrow(rollcall)) * 100),
+    attendance.live.pct    = round((viewers.live.dce / nrow(rollcall)) * 100),
+    attendance.total.pct   = round((viewers.total.dce / nrow(rollcall)) * 100)
   )
-episode.stats <- episode.stats %>% filter(nrow(stats) != 0)
 ```
 
 ```{r}
-attendance_path <- sprintf("%s/attendance.%s.csv", data.dir, course.term)
-attendance <- tbl_df(read.csv(attendance_path, stringsAsFactors = F))
-episodes <- episodesByTerm(course.term)
+results <- episode.stats %>%
+  arrange(available) %>%
+  select(-starts_with('stats'), -starts_with('huids'), -mpid, -ends_with('duration'), -start) 
+write_csv(results, sprintf("./attendance_summary_%s.csv", course.series.id))
 ```
 
-```{r}
-course.lectures <- filter(episodes, series == course.series.id)
-course.students <- filter(rollcall, series == course.series.id & reg_level != 'S')
-course.registered.students <- filter(course.students, status == 'Registered')
-course.students$series <- as.character(course.students$series)
-student.attendance <- filter(attendance, huid %in% course.students$huid & mpid %in% course.lectures$mpid)
-student.attendance <- left_join(student.attendance, course.students)
-lecture.attendance <- left_join(student.attendance, course.lectures)
-attendance.summary <- lecture.attendance %>%
-  group_by(mpid, title, available) %>% 
-  summarise(registered_watched = sum(status=='Registered'), all_watched = n())
-attendance.summary <- mutate(attendance.summary, all_watched_pct = as.integer((all_watched / nrow(course.students)) * 100))
-attendance.summary <- mutate(attendance.summary, reg_watched_pct = as.integer((registered_watched / nrow(course.registered.students)) * 100))
 
-```

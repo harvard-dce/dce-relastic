@@ -105,7 +105,7 @@ transcriptStats <- function() {
   tbl_df(data.frame(res$aggregations))
 }
 
-histogramAgg <- function(field, interval, agg.name = NULL, min_doc_count = 1) {
+histogramAgg <- function(field, interval, agg.name = NULL, min_doc_count = 0) {
   agg <- list()
   if (is.null(agg.name)) {
     agg.name <- sprintf("%s_histogram", field)
@@ -146,8 +146,8 @@ termAgg <- function(field, size = 0, sub_aggs = NULL) {
   agg
 }
 
-viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
-                         huid = NULL, mpid = NULL, playing = T, anonymous = F, just.json = F) {
+viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL, huid = NULL,
+                         mpid = NULL, live = NULL, playing = T, anonymous = F, print.json = F) {
 
   must_not <- list()
   must <- list()
@@ -177,6 +177,9 @@ viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
   if (!is.null(mpid)) {
     must <- c(must, list(list(term=list(mpid=mpid))))
   }
+  if (!is.null(live)) {
+    must <- c(must, list(list(term=list(is_live=as.integer(live)))))
+  }
 
   q <- list(
     query=list(
@@ -192,14 +195,13 @@ viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL,
   }
 
   qbody <- toJSON(q, pretty = T, auto_unbox = T)
-  if (just.json) {
+  if (print.json) {
     print(qbody)
+  }
+  res <- Search(index, body = qbody, asdf = T, size = 0)
+  if (res$hits$total) {
+    tbl_df(data.frame(res$aggregations))
   } else {
-    res <- Search(index, body = qbody, asdf = T, size = 0)
-    if (res$hits$total) {
-      tbl_df(data.frame(res$aggregations))
-    } else {
-      tibble()
-    }
+    tibble()
   }
 }
