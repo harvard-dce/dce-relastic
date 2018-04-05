@@ -22,43 +22,13 @@ rollcall <- tbl_df(
     rollcall.path, stringsAsFactors = F
     )
   ) %>% filter(series == course.series.id & reg_level != 'S')
-episodes <- getEpisodes('2017-02', course.series.id) %>% 
+episodes <- getEpisodes(course.series.id, '2017-02') %>% 
   select(mpid, title, duration, available, start, live_duration) %>%
   mutate(available = coalesce(available, start))
 ```
 
 ```{r}
 
-calcAttendance <- function(mpid, duration, live = F) {
-  student.stats <- viewingStats(
-    actions.index, 
-    '2017-02', 
-    mpid = mpid, 
-    live = live,
-    aggs = termAgg(
-      "huid", 
-      sub_aggs = histogramAgg(
-        "action.inpoint", 
-        toString(inpoint.interval), 
-        agg.name = "inpoints"
-      )
-    )
-#   ,print.json = T
-  )
-  if (nrow(student.stats) != 0) {
-    duration.in.seconds <- duration / 100
-    student.stats <- student.stats %>% 
-      rowwise() %>% 
-      mutate(
-        huid=by_huid.buckets.key,
-        intervals=nrow(by_huid.buckets.inpoints.buckets),
-        watched=round((intervals / (duration.in.seconds / inpoint.interval)) * 100)
-      ) %>%
-      select(huid, intervals, watched) %>%
-      left_join(rollcall)
-  }
-  list(student.stats)
-}
 
 ```
 

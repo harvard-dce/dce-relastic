@@ -1,0 +1,20 @@
+---
+title: "Transcript Confidence"
+output: html_notebook
+params:
+  series.id: "20170224816"
+---
+
+```{r}
+source('global.R')
+```
+
+```{r}
+episodes <- getEpisodes(params$series.id)
+```
+
+```{r}
+transcripts <- transcriptStats() %>%
+  filter(per_lecture.buckets.key %in% episodes$mpid)
+  
+```

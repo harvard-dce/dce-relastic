@@ -1,6 +1,6 @@
 PackratFormat: 1.4
 PackratVersion: 0.4.9.1
-RVersion: 3.4.2
+RVersion: 3.4.4
 Repos: CRAN=https://cran.rstudio.com/
 
 Package: BH
@@ -117,6 +117,13 @@ Version: 1.1.0
 Hash: c233690edd9fa17a63f7c8d83c1ca153
 Requires: crayon
 
+Package: devtools
+Source: CRAN
+Version: 1.13.5
+Hash: 80061b2ad6853fd3665bf883123a1b1a
+Requires: digest, git2r, httr, jsonlite, memoise, rstudioapi, whisker,
+    withr
+
 Package: dichromat
 Source: CRAN
 Version: 2.0-0
@@ -167,6 +174,11 @@ Version: 2.2.1
 Hash: 46e5cb78836848aa44655e577433f54b
 Requires: digest, gtable, lazyeval, plyr, reshape2, scales, tibble
 
+Package: git2r
+Source: CRAN
+Version: 0.21.0
+Hash: 64747922e287be74e8e8b46c107fd3ef
+
 Package: glue
 Source: CRAN
 Version: 1.2.0
@@ -198,6 +210,12 @@ Source: CRAN
 Version: 0.3.6
 Hash: 34e5c725d3ae30a76516792edcc16f24
 Requires: Rcpp, digest
+
+Package: httpuv
+Source: CRAN
+Version: 1.3.6.2
+Hash: b5a78a490d2d34b2468b3efd4f0c35ab
+Requires: Rcpp
 
 Package: httr
 Source: CRAN
@@ -243,6 +261,12 @@ Version: 0.7.7
 Hash: fea2343a1119d61b0cc5c0a950d103a3
 Requires: mime
 
+Package: memoise
+Source: CRAN
+Version: 1.1.0
+Hash: 410fcd334bc626db100237cc1370f2e9
+Requires: digest
+
 Package: mime
 Source: CRAN
 Version: 0.5
@@ -272,12 +296,16 @@ Hash: 225d43f64f60e8996d10efe15b381c66
 
 Package: packrat
 Source: github
-Version: 0.4.9-1
-Hash: 2b4edf59823bbc14c9c70948a3b49926
+Version: 0.4.9-2
+Hash: d08315bb6c441b002c5c9de874e32858
 GithubRepo: packrat
 GithubUsername: rstudio
 GithubRef: master
-GithubSha1: f98789177c02b3066144dfb8c39ea67d681fd73c
+GithubSha1: a0b92cac860c2751e27f5432f49496e1241e04c5
+RemoteHost: https://api.github.com
+RemoteRepo: packrat
+RemoteUsername: rstudio
+RemoteSha: a0b92cac860c2751e27f5432f49496e1241e04c5
 
 Package: pillar
 Source: CRAN
@@ -389,6 +417,18 @@ Version: 0.3-1
 Hash: 367275e3dcdd208339e131c7a41bec56
 Requires: stringr
 
+Package: shiny
+Source: CRAN
+Version: 1.0.5
+Hash: 4d47532a807122bfd6bc3818310f9d2e
+Requires: R6, digest, htmltools, httpuv, jsonlite, mime, sourcetools,
+    xtable
+
+Package: sourcetools
+Source: CRAN
+Version: 0.1.6
+Hash: 226d56d7469587da40b0f96180e711b4
+
 Package: stringi
 Source: CRAN
 Version: 1.1.5
@@ -451,14 +491,19 @@ Hash: 803d662762e532705c2c066a82d066e7
 
 Package: withr
 Source: CRAN
-Version: 2.0.0
-Hash: cc7e555b8e249aa5cf391592fcae71a2
+Version: 2.1.2
+Hash: d534108bcd5f34ec73e9eb523751ba20
 
 Package: xml2
 Source: CRAN
 Version: 1.1.1
 Hash: bb72c0247ccf079bec2c838e54df64da
 Requires: BH, Rcpp
+
+Package: xtable
+Source: CRAN
+Version: 1.8-2
+Hash: 7293235cfcc14cdff1ce7fd1a0212031
 
 Package: yaml
 Source: CRAN
