@@ -22,7 +22,7 @@ rollcall <- tbl_df(
     rollcall.path, stringsAsFactors = F
     )
   ) %>% filter(series == course.series.id & reg_level != 'S')
-episodes <- getEpisodes('2017-02', course.series.id) %>% 
+episodes <- getEpisodes(course.series.id, '2017-02') %>% 
   select(mpid, title, duration, available, start, live_duration) %>%
   mutate(available = coalesce(available, start))
 ```

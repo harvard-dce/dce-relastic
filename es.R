@@ -24,6 +24,10 @@ splitYearTerm <- function(year.term) {
   YT
 }
 
+yearTermFromSeries <- function(series) {
+  data.frame(year=substr(series, 1, 4), term=substr(series, 5, 6))
+}
+
 episodesByTerm <- function(year.term) {
   yt <- splitYearTerm(year.term)
   qbody <- str_interp('{
@@ -43,8 +47,18 @@ episodesByTerm <- function(year.term) {
   tbl_df(res)
 }
 
-getEpisodes <- function(year.term, series = NULL) {
-  yt <- splitYearTerm(year.term)
+getEpisodes <- function(series = NULL, year.term = NULL) {
+
+  if (is.null(series) && is.null(year.term)) {
+    stop("need either series or year.term arg")
+  }
+
+  if (!is.null(year.term)) {
+    yt <- splitYearTerm(year.term)
+  } else {
+    yt <- yearTermFromSeries(series)
+  }
+
   must <- list(
     list(term=list(year=yt$year)),
     list(term=list(term=yt$term))
