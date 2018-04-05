@@ -1,0 +1,50 @@
+---
+title: "Episode Stats"
+output: html_notebook
+echo: FALSE
+params:
+  year.term: "2017-02"
+---
+
+```{r}
+source('global.R')
+```
+
+```{r}
+episodes <- getEpisodes(year.term = params$year.term) %>%
+  select(mpid, title, duration, start, available, type, course, series) %>%
+  mutate(
+    available = coalesce(available, start),
+    auth.type = type,
+    type = as.factor(substr(type, 0, 1)),
+    series = as.factor(series),
+    course = as.factor(course)
+    ) %>%
+  filter(!grepl("test", title, ignore.case = T)) %>%
+  filter(!grepl("test", course, ignore.case = T)) %>%
+  filter(type != 'P')
+```
+
+```{r}
+episode.stats <- episodes[1:100,] %>%
+  rowwise() %>%
+  mutate(stats = episodeStats(mpid, duration)) %>%
+  filter(!is.null(stats)) 
+```
+
+```{r}
+episode.metrics <- episode.stats %>%
+  mutate(
+    mean.watched.pct = stats$mean.watched.pct,
+    unique.viewers = stats$unique.viewers
+  ) %>% 
+  select(mpid, title, duration, available, type, course, series, mean.watched.pct, unique.viewers)
+```
+
+```{r}
+episode.daily <- episode.stats %>%
+  mutate(
+    daily.events = list(list(timestamps=stats$timestamps, event.count=stats$event.count))
+  ) %>%
+  select(mpid, daily.events) 
+```

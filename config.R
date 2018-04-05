@@ -15,7 +15,10 @@ es.transport <- env("ES_TRANSPORT", 'http')
 es.path <- env("ES_PATH")
 es.user <- env("ES_USER")
 es.pwd <- env("ES_PWD")
+es.actions.index <- env("ES_ACTIONS_INDEX", 'useractions-*')
 es.episode.index <- env("ES_EPISODE_INDEX", 'episodes')
 es.transcript.index <- env("ES_TRANSCRIPT_INDEX", 'transcripts')
+es.query.debug <- TRUE
 default.tz <- "America/New_York"
 rollcall.path <- env('ROLLCALL_PATH')
+inpoint.interval <- 300
