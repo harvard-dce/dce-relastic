@@ -1,0 +1,95 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+source('global.R')
+```
+
+```{r}
+q <- '
+{
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "exists": {
+            "field": "available"
+          }
+        }
+      ]
+    }
+  },
+  "size": 0,
+  "aggs": {
+    "by_month": {
+      "date_histogram": {
+        "field": "available",
+        "interval": "month"
+      },
+      "aggs": {
+        "total_duration": {
+          "sum": {
+            "field": "duration"
+          }
+        },
+        "sum_in_hours": {
+          "bucket_script": {
+            "buckets_path": {
+              "monthly_sum": "total_duration"
+            },
+            "script": "(monthly_sum / 1000) / (60 * 60)"
+          }
+        }
+      }
+    }
+  }
+}
+'
+res = Search(es.episode.index, body = q, asdf = T, size = 0)
+df <- as.tibble(data.frame(res$aggregations))
+
+```
+
+```{r}
+df$month <- format(as.Date(df$by_month.buckets.key_as_string), format("%Y-%m"))
+df$total.hours <- df$by_month.buckets.sum_in_hours.value
+```
+
+```{r}
+df <- df[16:nrow(df),] %>%
+  select(month, total.hours)
+ggplot(df, aes(x = month, y = total.hours)) +
+  geom_bar(stat = "identity")
+```
+
+```{r}
+online.workers <- jsonlite::read_json('online-workers.json', simplifyVector = T)
+online.workers <- online.workers %>%
+  mutate(
+    workers = as.integer(workers),
+    jobs = as.integer(jobs),
+    timestamp = as.POSIXct(timestamp / 1000, origin='1970-01-01'),
+    hourly = floor_date(timestamp, unit = "hour")
+  )
+online.workers.hourly <- online.workers %>%
+  group_by(hourly) %>%
+  summarise(workers.mean = mean(workers), jobs.mean = mean(jobs)) %>%
+  mutate(
+    workers.adj = case_when(
+      jobs.mean == 0  ~ 0,
+      jobs.mean <= 4  ~ 1,
+      jobs.mean <= 10 ~ 2,
+      TRUE            ~ workers.mean
+    )
+  )
+```
+
+```{r}
+ggplot(online.workers.hourly, aes(hourly)) +
+  geom_line(aes(y = jobs.mean, col = "var0")) +
+  geom_line(aes(y = workers.mean, col = "var1")) +
+  geom_line(aes(y = workers.adj, col = "var2"))
+
+```

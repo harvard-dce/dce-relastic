@@ -28,6 +28,22 @@ yearTermFromSeries <- function(series) {
   data.frame(year=substr(series, 1, 4), term=substr(series, 5, 6))
 }
 
+matchAllQuery <- function() {
+  list(
+    query=list(
+      match_all=fromJSON('{}')
+    )
+  )
+}
+
+queryToJson <- function(q) {
+  qbody <- toJSON(q, pretty = T, auto_unbox = T)
+  if (es.query.debug) {
+    print(qbody)
+  }
+  qbody
+}
+
 episodesByTerm <- function(year.term) {
   yt <- splitYearTerm(year.term)
   qbody <- str_interp('{
@@ -44,10 +60,30 @@ episodesByTerm <- function(year.term) {
   res <- res$hits$hits
   # rewrite the source doc field names to make the df easier to work with
   res <- res %>% setNames(gsub("_source\\.", "", names(.)))
-  tbl_df(res)
+  as.tibble(res)
 }
 
+<<<<<<< HEAD
 getEpisodes <- function(series = NULL, year.term = NULL) {
+=======
+getEpisode <- function(mpid) {
+  q <- list(
+    query=list(
+      bool=list(
+        filter=list(
+          termFilter("mpid", mpid)
+        )
+      )
+    )
+  )
+  qbody <- toJSON(q, pretty = T, auto_unbox = T)
+  print(qbody)
+  res <- Search(es.episode.index, body = qbody, asdf = TRUE, size = 1)
+  res <- res$hits$hits %>% setNames(gsub("_source\\.", "", names(.)))
+  as.tibble(res)
+}
+
+getEpisodes <- function(series = NULL, year.term = NULL, qfilter = list(), must_not = list()) {
 
   if (is.null(series) && is.null(year.term)) {
     stop("need either series or year.term arg")
@@ -59,77 +95,79 @@ getEpisodes <- function(series = NULL, year.term = NULL) {
     yt <- yearTermFromSeries(series)
   }
 
-  must <- list(
+  qfilter <- c(qfilter, list(
     list(term=list(year=yt$year)),
     list(term=list(term=yt$term))
-  )
+  ))
+
   if (!is.null(series)) {
-    must <- c(must, list(list(term=list(series=series))))
+    qfilter <- c(qfilter, list(list(term=list(series=series))))
   }
+
   q <- list(
     query=list(
       bool=list(
-        must=must
+        filter=qfilter,
+        must_not=must_not
       )
     )
   )
-  qbody <- toJSON(q, pretty = T, auto_unbox = T)
+
+  qbody <- queryToJson(q)
   res <- Search(es.episode.index, body = qbody, asdf = TRUE, size = 9999)
-  res <- res$hits$hits
   # rewrite the source doc field names to make the df easier to work with
-  res <- res %>% setNames(gsub("_source\\.", "", names(.)))
-  tbl_df(res)
+  res <- res$hits$hits %>% setNames(gsub("_source\\.", "", names(.)))
+  as.tibble(res)
 }
 
 transcriptStats <- function() {
-  qbody <- '{
-    "query": { "match_all": {} },
-    "aggs": {
-      "per_lecture": {
-        "terms": {
-          "field": "mpid",
-          "size": 0
-        },
-        "aggs": {
-          "confidence": {
-            "extended_stats": {
-              "field": "confidence"
-            }
-          },
-          "hesitations": {
-            "sum": {
-              "field": "hesitations"
-            }
-          },
-          "words": {
-            "sum": {
-              "field": "word_count"
-            }
-          },
-          "hesitations_length": {
-            "sum": {
-              "field": "hesitation_length"
-            }
-          }
-        }
-      }
-    }
-  }'
+  q <- matchAllQuery()
+  q$aggs <- termAgg(
+    "mpid",
+    agg.name = "per_lecture",
+    sub_aggs = c(
+      metricAgg("confidence", "extended_stats", agg.name = "confidence"),
+      metricAgg("hesitations", "sum", agg.name = "hesitations"),
+      metricAgg("word_count", "sum", agg.name = "word_count"),
+      metricAgg("hesitation_length", "sum", agg.name = "hesitation_length")
+    )
+  )
+  qbody <- queryToJson(q)
   res <- Search(es.transcript.index, body = qbody, asdf = T, size = 0)
-  tbl_df(data.frame(res$aggregations))
+  as.tibble(data.frame(res$aggregations)) %>%
+    mutate(
+      mpid = per_lecture.buckets.key,
+      hesitations.length.sum = per_lecture.buckets.hesitation_length.value,
+      hesitations.count = per_lecture.buckets.hesitations.value,
+      word.count = per_lecture.buckets.word_count.value,
+      confidence.mean = per_lecture.buckets.confidence.avg,
+      confidence.std = per_lecture.buckets.confidence.std_deviation
+    ) %>%
+    select(-starts_with('per_lecture'))
 }
 
-histogramAgg <- function(field, interval, agg.name = NULL, min_doc_count = 0) {
+metricAgg <- function(field, type, agg.name = NULL) {
+  agg <- list()
+  if (is.null(agg.name)) {
+    agg.name <- sprintf("%s_%s", field, type)
+  }
+  agg[[agg.name]] <- list()
+  agg[[agg.name]][[type]] <- list(
+    field=field
+  )
+  agg
+}
+
+histogramAgg <- function(field, interval, type = "histogram", agg.name = NULL, min_doc_count = 0) {
   agg <- list()
   if (is.null(agg.name)) {
     agg.name <- sprintf("%s_histogram", field)
   }
-  agg[[agg.name]] <- list(
-    histogram=list(
-      field=field,
-      interval=interval,
-      min_doc_count=min_doc_count
-    )
+  agg[[agg.name]] <- list()
+  agg[[agg.name]][[type]] <- list(
+    field=field,
+    interval=interval,
+    min_doc_count=min_doc_count
   )
   agg
 }
@@ -145,9 +183,13 @@ cardinalityAgg <- function(field) {
   agg
 }
 
-termAgg <- function(field, size = 0, sub_aggs = NULL) {
+termAgg <- function(field, size = 0, agg.name = NULL, sub_aggs = NULL) {
   agg <- list()
-  agg.name <- sprintf("by_%s", field)
+
+  if (is.null(agg.name)) {
+    agg.name <- sprintf("by_%s", field)
+  }
+
   agg[[agg.name]] <- list(
     terms=list(
       field=field,
@@ -160,45 +202,129 @@ termAgg <- function(field, size = 0, sub_aggs = NULL) {
   agg
 }
 
-viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL, huid = NULL,
-                         mpid = NULL, live = NULL, playing = T, anonymous = F, print.json = F) {
+termFilter <- function(field, value) {
+  tf <- list(term=list())
+  tf$term[field] <- value
+  tf
+}
 
-  must_not <- list()
-  must <- list()
+studentWatchScore <- function(es.actions.index, huid, mpid) {
+  qfilter <- list(
+    termFilter("huid", huid),
+    termFilter("mpid", mpid),
+    termFilter("action.type", "HEARTBEAT"),
+    termFilter("action.is_playing", T)
+  )
+  q <- list(
+    query=list(
+      bool=list(
+        filter=qfilter
+      )
+    )
+  )
+  q$aggs <- histogramAgg("action.inpoint", 300, agg.name = "inpoints", min_doc_count = 1)
+  qbody <- toJSON(q, pretty = T, auto_unbox = T)
+  if (params$debug) {
+    print(qbody)
+  }
+  res <- Search(es.actions.index, body = qbody, asdf = T, size = 0)
+  if (res$hits$total) {
+    as.tibble(data.frame(res$aggregations))
+  } else {
+    tibble()
+  }
+}
 
+episodeStats <- function(mpid, duration, live = F) {
+
+  aggs <- c(
+    histogramAgg(
+      "@timestamp",
+      "day",
+      type = "date_histogram",
+      agg.name = "by_day"
+    ),
+    termAgg("huid",
+      sub_aggs = histogramAgg(
+        "action.inpoint",
+        inpoint.interval,
+        agg.name = "inpoints"
+      )
+    )
+  )
+
+  actions.res <- getActions(
+    mpid = mpid,
+    live = live,
+    qfilter = list(termFilter("action.type", "HEARTBEAT")),
+    aggs = aggs
+  )
+  Sys.sleep(1)
+
+  if (!actions.res$hits$total) {
+    list(NULL)
+  } else {
+    inpoints <- as.tibble(data.frame(actions.res$aggregations$by_huid))
+
+    duration.in.seconds <- round(duration / 1000)
+    total.intervals <- ceiling(duration.in.seconds / inpoint.interval)
+
+    inpoints <- inpoints %>%
+      rowwise() %>%
+      mutate(
+        huids             = buckets.key,
+        watched.intervals = nrow(buckets.inpoints.buckets),
+        watched.pct       = (watched.intervals / total.intervals) * 100
+      )
+
+    list(
+      list(
+        mean.watched.pct = round(mean(inpoints$watched.pct), 2),
+        unique.viewers   = length(inpoints$huids),
+        timestamps       = actions.res$aggregations$by_day$buckets$key,
+        event.count      = actions.res$aggregations$by_day$buckets$doc_count
+      )
+    )
+  }
+}
+
+getActions <- function(year.term = NULL, series = NULL, huid = NULL,
+                       mpid = NULL, live = NULL, playing = T,  anonymous = F,
+                       qfilter = list(), must_not = list(), aggs = NULL,
+                       size = 0, print.json = F) {
   if (playing) {
-    must <- c(must, list(list(term=list(action.is_playing=T))))
+    qfilter <- c(qfilter, list(list(term=list(action.is_playing=T))))
   }
 
   if (!anonymous) {
-    must_not <- c(must_not, list(list(term=list(huid="anonymous"))))
+    must_not <- c(must_not, list(list(terms=list(huid=c("anonymous", "public_user")))))
   }
 
   if (!is.null(year.term)) {
     yt <- splitYearTerm(year.term)
-    must <- c(
-      must,
+    qfilter <- c(
+      qfilter,
       list(list(term=list(episode.year=yt$year))),
       list(list(term=list(episode.term=yt$term)))
     )
   }
   if (!is.null(series)) {
-    must <- c(must, list(list(term=list(episode.series=series))))
+    qfilter <- c(qfilter, list(list(term=list(episode.series=series))))
   }
   if (!is.null(huid)) {
-    must <- c(must, list(list(term=list(huid=huid))))
+    qfilter <- c(qfilter, list(list(term=list(huid=huid))))
   }
   if (!is.null(mpid)) {
-    must <- c(must, list(list(term=list(mpid=mpid))))
+    qfilter <- c(qfilter, list(list(term=list(mpid=mpid))))
   }
   if (!is.null(live)) {
-    must <- c(must, list(list(term=list(is_live=as.integer(live)))))
+    qfilter <- c(qfilter, list(list(term=list(is_live=as.integer(live)))))
   }
 
   q <- list(
     query=list(
       bool=list(
-        must=must,
+        filter=qfilter,
         must_not=must_not
       )
     )
@@ -208,14 +334,6 @@ viewingStats <- function(index, year.term = NULL, aggs = NULL, series = NULL, hu
     q$aggs <- aggs
   }
 
-  qbody <- toJSON(q, pretty = T, auto_unbox = T)
-  if (print.json) {
-    print(qbody)
-  }
-  res <- Search(index, body = qbody, asdf = T, size = 0)
-  if (res$hits$total) {
-    tbl_df(data.frame(res$aggregations))
-  } else {
-    tibble()
-  }
+  qbody <- queryToJson(q)
+  Search(es.actions.index, body = qbody, asdf = T, size = 0)
 }
