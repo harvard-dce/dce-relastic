@@ -63,9 +63,6 @@ episodesByTerm <- function(year.term) {
   as.tibble(res)
 }
 
-<<<<<<< HEAD
-getEpisodes <- function(series = NULL, year.term = NULL) {
-=======
 getEpisode <- function(mpid) {
   q <- list(
     query=list(
