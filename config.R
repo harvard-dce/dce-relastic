@@ -22,3 +22,4 @@ es.query.debug <- F
 default.tz <- "America/New_York"
 rollcall.path <- env('ROLLCALL_PATH')
 inpoint.interval <- 300
+campus.location <- list(lat=42.3582, lon=-71.0507)
