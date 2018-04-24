@@ -1,0 +1,33 @@
+---
+title: "Student Stats"
+output: html_notebook
+echo: FALSE
+params:
+  year.term: "2018-02"
+---
+
+```{r}
+source('global.R')
+```
+
+```{r}
+episodes <- getEpisodes(year.term = params$year.term) %>%
+  select(mpid, title, duration, available, start, type, course, series) %>%
+  mutate(
+    available = coalesce(available, start),
+    auth.type = type,
+    type = as.factor(substr(type, 0, 1)),
+    series = as.factor(series),
+    course = as.factor(course)
+    ) %>%
+  filter(!grepl("test", title, ignore.case = T)) %>%
+  filter(!grepl("test", course, ignore.case = T)) %>%
+  filter(type != 'P')
+```
+
+```{r}
+student.stats <- episodes[1:10,] %>%
+  rowwise() %>%
+  mutate(stats = studentStats(mpid, duration)) %>%
+  filter(!is.null(stats)) 
+```

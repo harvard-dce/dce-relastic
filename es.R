@@ -199,36 +199,79 @@ termAgg <- function(field, size = 0, agg.name = NULL, sub_aggs = NULL) {
   agg
 }
 
+campusDistanceAgg <- function(sub_aggs = NULL) {
+  agg <- list(
+    distance=list(
+      geo_distance=list(
+        field="geoip.location",
+        unit="km",
+        origin=list(
+          lat=campus.location$lat,
+          lon=campus.location$lon
+        ),
+        ranges=list(
+          list(
+            key="oncampus",
+            to=1
+          ),
+          list(
+            key="local",
+            from=1,
+            to=10
+          ),
+          list(
+            key="driving_distance",
+            from=10,
+            to=100
+          ),
+          list(
+            key="remote",
+            from=100
+          )
+        )
+      )
+    )
+  )
+  if (!is.null(sub_aggs)) {
+    agg[["distance"]]$aggs <- sub_aggs
+  }
+  agg
+}
+
 termFilter <- function(field, value) {
   tf <- list(term=list())
   tf$term[field] <- value
   tf
 }
 
-studentWatchScore <- function(es.actions.index, huid, mpid) {
-  qfilter <- list(
-    termFilter("huid", huid),
-    termFilter("mpid", mpid),
-    termFilter("action.type", "HEARTBEAT"),
-    termFilter("action.is_playing", T)
-  )
-  q <- list(
-    query=list(
-      bool=list(
-        filter=qfilter
+studentStats <- function(mpid, duration, live = F) {
+  aggs <- c(
+    termAgg("huid",
+      sub_aggs = c(
+        campusDistanceAgg(),
+        histogramAgg(
+          "action.inpoint",
+          inpoint.interval,
+          agg.name = "inpoints"
+        )
       )
     )
   )
-  q$aggs <- histogramAgg("action.inpoint", 300, agg.name = "inpoints", min_doc_count = 1)
-  qbody <- toJSON(q, pretty = T, auto_unbox = T)
-  if (params$debug) {
-    print(qbody)
-  }
-  res <- Search(es.actions.index, body = qbody, asdf = T, size = 0)
-  if (res$hits$total) {
-    as.tibble(data.frame(res$aggregations))
+  actions.res <- getActions(
+    mpid = mpid,
+    live = live,
+    qfilter = list(termFilter("action.type", "HEARTBEAT")),
+    aggs = aggs
+  )
+  if (!actions.res$hits$total) {
+    list(NULL)
   } else {
-    tibble()
+    tbl <- as.tibble(data.frame(actions.res$aggregations$by_huid))
+    list(
+      list(
+        stats = tbl
+        )
+    )
   }
 }
 
@@ -242,10 +285,13 @@ episodeStats <- function(mpid, duration, live = F) {
       agg.name = "by_day"
     ),
     termAgg("huid",
-      sub_aggs = histogramAgg(
-        "action.inpoint",
-        inpoint.interval,
-        agg.name = "inpoints"
+      sub_aggs = c(
+        histogramAgg(
+          "action.inpoint",
+          inpoint.interval,
+          agg.name = "inpoints"
+        ),
+        campusDistanceAgg()
       )
     )
   )

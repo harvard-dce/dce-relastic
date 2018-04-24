@@ -1,0 +1,73 @@
+---
+title: "Course Viewing Time Series"
+output: html_notebook
+params:
+  series.id: "20180114289"
+---
+
+```{r}
+source('global.R')
+```
+
+```{r}
+
+qfilter <- c(
+  list(
+    term=list(
+      episode.series=params$series.id
+    )
+  )
+)
+
+q <- list(
+  query=list(
+    bool=list(
+      filter=list(qfilter)
+    )
+  )
+)
+
+aggs <- histogramAgg("@timestamp", "day", type = "date_histogram", agg.name = "by_day")
+aggs$by_day$aggs <- termAgg("mpid", agg.name = "by_mpid")
+aggs$by_day$aggs$by_mpid$aggs <- cardinalityAgg("huid")
+
+q$aggs <- aggs
+  
+toJSON(q, pretty = T, auto_unbox = T)
+```
+
+```{r}
+qbody <- queryToJson(q)
+res <- Search(es.actions.index, body = qbody, asdf = T, size = 0)
+```
+
+```{r}
+episodes <- getEpisodes(series = params$series.id) %>%
+  mutate(
+    type = as.factor(substr(type, 0, 1)),
+  ) %>%
+  filter(type != "P") %>%
+  select(mpid, title, type, available)
+```
+
+```{r}
+by_day <- res$aggregations$by_day$buckets %>%
+  filter(doc_count > 0) %>%
+  unnest(by_mpid.buckets) %>%
+  rename(
+    day = key_as_string,
+    mpid = key1,
+    huids = huid_cardinality.value
+    ) %>%
+  select(day, mpid, huids) %>%
+  left_join(episodes) %>%
+  mutate(day = as.Date(day)) %>%
+  filter(!is.na(title) & day < as.Date("2018-01-01"))
+
+# create a factor ordered by availability to make our plot facets sort correctly
+by_day$title_ordered <- factor(by_day$title, levels=unique(by_day$title[order(by_day$available)]), ordered=T)
+```
+```{r}
+ggplot(by_day[by_day$type == "L",], aes(x = day, y = huids, col = title_ordered))  + geom_line() + facet_grid(title_ordered ~ .)
+ggplot(by_day[by_day$type == "S",], aes(x = day, y = huids, col = title_ordered))  + geom_line() + facet_grid(title_ordered ~ .)
+```
